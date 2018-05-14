@@ -1,4 +1,4 @@
-# FPGrowth
+# Implementation of FPGrowth/Apriori Alogorithm in spark without SparkMLlib FPGrowth module. 
 
 ALL possible association rules and compute confidence, support and number of items for each rule. 
 
