@@ -1,3 +1,4 @@
+citrus fruit,semi-finished bread,margarine,ready soups
 tropical fruit,yogurt,coffee
 whole milk
 pip fruit,yogurt,cream cheese ,meat spreads

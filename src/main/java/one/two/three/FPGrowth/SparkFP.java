@@ -97,13 +97,21 @@ public class SparkFP {
 		JavaSparkContext sparkContext = new JavaSparkContext(conf);
 		SparkSession session = SparkSession.builder().appName(APP_NAME).config(conf).getOrCreate();
 //		Read the input file 
-		JavaRDD<String> rdd = sparkContext.textFile("input1.txt");
+		JavaRDD<String> rdd = sparkContext.textFile("input2.txt");
 //		 creating all possible Association rule (X->Y) and all single item set for each transaction 
 		JavaRDD<AssociationRule> rulesRdd = rdd.flatMap(new FlatMapFunction<String, AssociationRule>() {
 			@Override
 			public Iterator<AssociationRule> call(String transaction) throws Exception {
 				List<AssociationRule> associationRules = new ArrayList<>();
 				String[] items = transaction.split(",");
+				AssociationRule associationRule = null;
+//				handle only one item in transaction 
+				if (items.length == 1 ) {
+					associationRule = new AssociationRule();
+					associationRule.setX(items[0]);
+					associationRule.setFreqOfX(1);
+					associationRules.add(associationRule);
+				}
 				List<String> allSets = new ArrayList<>();
 				for (int i = 1; i < (1 << items.length) - 1; i++) {
 					List<String> temp = new ArrayList<>();
@@ -114,7 +122,7 @@ public class SparkFP {
 					}
 					allSets.add(String.join("|", temp));
 				}
-				AssociationRule associationRule = null;
+				
 				for (String set : allSets) {
 
 					associationRule = new AssociationRule();
@@ -159,26 +167,27 @@ public class SparkFP {
 		session.udf().register("splitUdf", splitUdf, DataTypes.IntegerType);
 		Dataset<AssociationRule> ruleDS = session.createDataFrame(rulesRdd, AssociationRule.class)
 				.as(Encoders.bean(AssociationRule.class));
-		
+//		ruleDS.show();
 //		freq(X) is calculated 
 		Dataset<Row> freqX = ruleDS.groupBy(ruleDS.col("x")).agg(sum(col("freqOfX")).as("frq(X)"));
+//		freqX.show();
 		// Freq(X,Y) is calculated , support = Freq(X,y)/N and confidence= Freq(X,y)/Freq(X) 
 		Dataset<Row> ruleXY = ruleDS.groupBy(ruleDS.col("rule")).agg(sum(col("confidence")).as("freq(X,Y)"))
 				.withColumn("x", split(col("rule"), "->").getItem(0).cast(DataTypes.StringType));
-		long N = rdd.count();
+		Long N = rdd.count();
 		ruleXY = ruleXY.join(freqX, "x").withColumn("N", lit(N).cast(DataTypes.LongType));
-		// ruleXY.show();
+//		ruleXY.show();
 		ruleXY = ruleXY.withColumnRenamed("rule", "Association Rule")
 				.withColumn("Confidence", col("freq(X,Y)").divide(col("frq(X)")))
 				.withColumn("Support", col("freq(X,Y)").divide(col("N")));
+//		ruleXY.show();
 		ruleXY = ruleXY.withColumn("Number of items in the rule", callUDF("splitUdf", col("Association Rule")));
 		ruleXY = ruleXY.select("Association Rule", "Confidence", "Support", "Number of items in the rule");
 		Dataset<Row> res = ruleXY.agg(max(col("Confidence")).as("Max Confidence"), max("Support").as("Max Support"),
 				max("Number of items in the rule").as("Max Items in any rule"),
 				lit(ruleXY.count()).as("Total Num of Rules"));
 		res.show();
-		ruleXY.show();
-
+		ruleXY.show(100);
 	}
 
 }
