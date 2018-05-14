@@ -96,7 +96,9 @@ public class SparkFP {
 		SparkConf conf = new SparkConf().setMaster("local[4]").setAppName(APP_NAME);
 		JavaSparkContext sparkContext = new JavaSparkContext(conf);
 		SparkSession session = SparkSession.builder().appName(APP_NAME).config(conf).getOrCreate();
+//		Read the input file 
 		JavaRDD<String> rdd = sparkContext.textFile("input1.txt");
+//		 creating all possible Association rule (X->Y) and all single item set for each transaction 
 		JavaRDD<AssociationRule> rulesRdd = rdd.flatMap(new FlatMapFunction<String, AssociationRule>() {
 			@Override
 			public Iterator<AssociationRule> call(String transaction) throws Exception {
@@ -138,13 +140,7 @@ public class SparkFP {
 			}
 		});
 
-		// JavaRDD<String[]> itemsRdd = rdd.map(line -> line.split(","));
-		// List<String[]> items = itemsRdd.collect();
-		// for (String[] item : items) {
-		// for (String strings : item) {
-		// System.out.println(strings);
-		// }
-		// }
+		// UDF a count number of items in a Association rule 
 		UDF1<String, Integer> splitUdf = new UDF1<String, Integer>() {
 
 			/**
@@ -159,13 +155,14 @@ public class SparkFP {
 				return temp.length + 1;
 			}
 		};
+		
 		session.udf().register("splitUdf", splitUdf, DataTypes.IntegerType);
 		Dataset<AssociationRule> ruleDS = session.createDataFrame(rulesRdd, AssociationRule.class)
 				.as(Encoders.bean(AssociationRule.class));
-		// ruleDS.show(32);
-		// ruleDS.printSchema();
+		
+//		freq(X) is calculated 
 		Dataset<Row> freqX = ruleDS.groupBy(ruleDS.col("x")).agg(sum(col("freqOfX")).as("frq(X)"));
-		// withColumn("x", callUDF("split", col("rule")))
+		// Freq(X,Y) is calculated , support = Freq(X,y)/N and confidence= Freq(X,y)/Freq(X) 
 		Dataset<Row> ruleXY = ruleDS.groupBy(ruleDS.col("rule")).agg(sum(col("confidence")).as("freq(X,Y)"))
 				.withColumn("x", split(col("rule"), "->").getItem(0).cast(DataTypes.StringType));
 		long N = rdd.count();
